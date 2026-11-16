@@ -1,7 +1,9 @@
-/*
+
 #pragma once
 #include "PointConstrained.h"
 #include <cmath>
+#include <limits>
+#include <stdexcept>
 
 class IntervalConstrained
 {
@@ -13,137 +15,47 @@ public:
     int index;
 
     IntervalConstrained()
-        : left(), right(), length(1.0), R(0.0), index(0) {}
+        : left(), right(), length(0.0), R(0.0), index(0) {}
 
-    IntervalConstrained(const PointConstrained& left_gran, const PointConstrained& right_gran, int idx = 0)
-        : left(left_gran), right(right_gran), index(idx)
-    {
-        updateInterv();
-    }
+    IntervalConstrained(const PointConstrained& a, const PointConstrained& b, int idx = 0)
+        : left(a), right(b), length(b.x - a.x), R(0.0), index(idx) {}
 
-    void updateInterv() {
-        length = right.x - left.x;
+    void updateInterv() { 
+        length = right.x - left.x; 
     }
 
     double getDelta(int N) const {
-        if (length <= 1e-10) return 0;
-        return pow(length, 1.0 / N);
+        if (length <= 0.0) return 0.0;
+        if (N == 1) return length;
+        if (N == 2) return std::sqrt(length);
+        if (N == 3) return std::cbrt(length);
+        if (N == 4) return std::sqrt(std::sqrt(length));
+        return std::pow(length, 1.0 / N);
     }
 
     bool isValid() const {
-        return length > 1e-12;
+        return std::isfinite(left.x) && std::isfinite(right.x) && std::nextafter(left.x, right.x) < right.x;
     }
 
-    double getNewPoint(double mu, double r, int N, int total_intervals) const
-    {
-        // ƒл€ граничных интервалов - точка в середине
-        if (index == 0 || index == total_intervals - 1) {
-            return (left.x + right.x) / 2.0;
+    double getNewPoint(double mu, double r, int N) const {
+        if (!isValid()) 
+            throw std::runtime_error("Interval cannot be subdivided");
+        if (N < 1 || !std::isfinite(mu) || mu <= 0.0 || !std::isfinite(r) || r <= 1.0)
+            throw std::invalid_argument("Invalid search parameters");
+        //середина интервала
+        double x = left.x + 0.5 * length;
+        //кра€ одного типа
+        if (left.nu == right.nu) {
+            const double diff = right.z - left.z;
+            x -= std::copysign(0.5 * std::pow(std::abs(diff) / mu, N) / r, diff);
         }
-
-        // ƒл€ внутренних интервалов
-        double diff = right.z - left.z;
-        double delta_z = fabs(diff);
-
-        if (mu < 1e-10) mu = 1.0;
-        if (delta_z < 1e-10) delta_z = 1e-10;
-
-        double sign = (diff > 0) ? 1.0 : -1.0;
-
-        double pow_val = pow(delta_z / mu, N);
-        double new_x = (left.x + right.x) / 2.0 - sign * (1.0 / (2.0 * r)) * pow_val;
-
-        if (new_x < left.x) new_x = left.x;
-        if (new_x > right.x) new_x = right.x;
-
-        return new_x;
-    }
-};*/
-
-
-
-#pragma once
-#include "PointConstrained.h"
-#include <cmath>
-
-class IntervalConstrained
-{
-public:
-    PointConstrained left;
-    PointConstrained right;
-    double length;
-    double R;
-    int index;
-
-    IntervalConstrained()
-        : left(), right(), length(1.0), R(0.0), index(0) {}
-
-    IntervalConstrained(const PointConstrained& left_gran, const PointConstrained& right_gran, int idx = 0)
-        : left(left_gran), right(right_gran), index(idx)
-    {
-        updateInterv();
-    }
-
-    void updateInterv() {
-        length = right.x - left.x;
-    }
-
-    double getDelta(int N) const {
-        if (length <= 1e-10) return 0;
-        return pow(length, 1.0 / N);
-    }
-
-    bool isValid() const {
-        return length > 1e-12;
-    }
-
-    /*
-    double getNewPoint(double mu, double r, int N, int total_intervals) const
-    {
-        // ƒл€ граничных интервалов - точка в середине
-        if (index == 0 || index == total_intervals - 1) {
-            double mid = (left.x + right.x) / 2.0;
-            return mid;
-        }
-
-        // ƒл€ внутренних интервалов
-        double diff = right.z - left.z;
-        double delta_z = fabs(diff);
-
-        if (mu < 1e-10) mu = 1.0;
-        if (delta_z < 1e-10) delta_z = 1e-10;
-
-        double sign = (diff > 0) ? 1.0 : -1.0;
-
-        double pow_val = pow(delta_z / mu, N);
-        double shift = (1.0 / (2.0 * r)) * pow_val;
-
-        //double new_x = (left.x + right.x) / 2.0 - sign * shift;  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! было 
-        double new_x = (left.x + right.x) / 2.0 - (right.z - left.z) / (2.0 * r * mu);
-
-        // Ќе позвол€ем точке совпасть с границами
-        if (new_x <= left.x) new_x = left.x + (right.x - left.x) * 0.001;
-        if (new_x >= right.x) new_x = right.x - (right.x - left.x) * 0.001;
-
-        return new_x;
-    }*/
-    double getNewPoint(double mu, double r, int N, int total_intervals) const
-    {
-        // —лучай 1: индексы разные Ч середина интервала
-        if (left.nu != right.nu) {
-            return (left.x + right.x) / 2.0;
-        }
-
-        // —лучай 2: индексы одинаковые Ч каноническа€ формула
-        if (mu < 1e-10) mu = 1.0;
-        double mid = (left.x + right.x) / 2.0;
-        double new_x = mid - (right.z - left.z) / (2.0 * r * mu);
-
-        // “очка строго внутри интервала
-        double eps = (right.x - left.x) * 1e-9;
-        if (new_x <= left.x)  new_x = left.x + eps;
-        if (new_x >= right.x) new_x = right.x - eps;
-
-        return new_x;
+        //защита от выхода за границы
+        if (!std::isfinite(x) || x <= left.x || x >= right.x)
+            x = left.x + 0.5 * length;
+        if (x <= left.x) 
+            x = std::nextafter(left.x, right.x);
+        if (x >= right.x) 
+            x = std::nextafter(right.x, left.x);
+        return x;
     }
 };
